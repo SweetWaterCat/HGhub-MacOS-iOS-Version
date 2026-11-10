@@ -133,7 +133,7 @@ export type UpdateInfo = {
 
 export type LineItem = { name?: string; url: string; host?: string };
 export type LineState = { base: string; default: string; fixed: LineItem[] };
-export type LineMirrors = { source: string; script?: string; items: LineItem[] };
+export type LineMirrors = { source: string; script?: string; items: LineItem[]; recommended_source?: string; recommended: LineItem[] };
 export type LineProbe = { url: string; ok: boolean; status?: number; ms: number; error?: string };
 
 /** `https://a.b/c` → `a.b`（线路展示用） */
