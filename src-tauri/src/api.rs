@@ -17,6 +17,13 @@ impl Api {
         }
     }
 
+    /// POST 信封：新播放接口 /api/videos/{id}/episodes/{ep}/playback 需要。
+    async fn post(&self, path: &str, body: Option<Value>) -> Result<Value, String> {
+        let origin = base();
+        let token = self.session.token(&origin);
+        edge(&origin, "POST", path, body, token.as_deref()).await
+    }
+
     async fn get(&self, path: &str) -> Result<Value, String> {
         let origin = base();
         let token = self.session.token(&origin);
@@ -465,8 +472,13 @@ pub async fn api_video(state: State<'_, Api>, id: i64) -> Result<Value, String> 
 
 #[tauri::command]
 pub async fn api_play(state: State<'_, Api>, id: i64, ep: u32) -> Result<Value, String> {
+    // 上游 2026-11-09 起把播放切到加密新通道：旧 GET /api/videos/{id}/play 仍返回 200
+    // 但 video_url 全为空串；新接口 POST /api/videos/{id}/episodes/{ep}/playback 返回 streams。
     state
-        .get(&format!("/api/videos/{id}/play?ep={ep}&page_texts=0"))
+        .post(
+            &format!("/api/videos/{id}/episodes/{ep}/playback"),
+            Some(json!({})),
+        )
         .await
 }
 
