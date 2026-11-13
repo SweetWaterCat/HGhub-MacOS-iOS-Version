@@ -1,6 +1,6 @@
 name: Build Android APK
 
-# 手动跑或 push main 自动出 APK；产物在 Actions 页下载（也可后续转 Release）。
+# 手动跑或 push main 自动出 APK；release 精简包会自动提交回仓库 release/ 目录。
 on:
   workflow_dispatch:
   push:
@@ -9,6 +9,9 @@ on:
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
 
 env:
   CI: "true"
@@ -57,12 +60,33 @@ jobs:
       - name: 初始化 Android 工程
         run: npx tauri android init
 
-      - name: 构建 APK（aarch64，debug 签名可直接装）
-        run: npx tauri android build --target aarch64 --debug
+      - name: release 复用 debug 签名（便于覆盖安装）
+        run: |
+          sed -i 's/getByName("release") {/getByName("release") {\n            signingConfig = signingConfigs.getByName("debug")/' \
+            src-tauri/gen/android/app/build.gradle.kts
+          grep -n "signingConfig" src-tauri/gen/android/app/build.gradle.kts
 
-      - name: 上传 APK
+      - name: 构建 release APK（aarch64 精简包）
+        run: npx tauri android build --target aarch64
+
+      - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-aarch64
+          name: android-apk-aarch64-release
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
+      - name: 精简包提交回仓库 release/ 目录
+        if: github.event_name == 'push'
+        run: |
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
+             release/HGhub-android-1.2.0-fix-arm64.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f release/HGhub-android-1.2.0-fix-arm64.apk
+          if git diff --cached --quiet; then
+            echo "APK 无变化，跳过提交"
+          else
+            git commit -m "chore(release): CI 精简包 ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID}) [skip ci]"
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+          fi
