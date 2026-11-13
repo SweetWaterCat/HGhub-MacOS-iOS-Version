@@ -30,6 +30,21 @@ const NOT_SITE: [&str; 10] = [
 ];
 /// 镜像列表上限（子域 × 域名是笛卡尔积，界面只展示这么多）
 const MIRROR_MAX: usize = 60;
+/// 内置备用镜像：地址发布页不可达（直连被阻断的环境）时兜底展示。
+/// 轮转域名会失效，配合界面「检测」挑选可用者；发布页恢复后以发布页为准。
+const FALLBACK_MIRRORS: [&str; 4] = [
+    "fgrg.dmsbazvt.cc",
+    "gngq.dmsbazvt.cc",
+    "apqnu.rlhjeyuw.cc",
+    "thu.adihsppe.cc",
+];
+
+fn fallback_items() -> Vec<Value> {
+    FALLBACK_MIRRORS
+        .iter()
+        .map(|h| json!({ "url": format!("https://{h}"), "host": *h }))
+        .collect()
+}
 /// 单条线路探测超时
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -42,7 +57,17 @@ pub fn fixed() -> Value {
 
 /// 拉地址发布页 → 解析 publish.js → 拼出镜像地址。只在用户点开「线路」时调用。
 pub async fn mirrors() -> Result<Value, String> {
-    let html = get_text(PUBLISH_PAGE).await?;
+    let html = match get_text(PUBLISH_PAGE).await {
+        Ok(h) => h,
+        Err(_) => {
+            return Ok(json!({
+                "source": "内置备用（发布页不可达）",
+                "items": fallback_items(),
+                "recommended_source": RECOMMEND_PAGE,
+                "recommended": [],
+            }));
+        }
+    };
     let js_rel = script_src(&html).unwrap_or_else(|| "publish.js".to_string());
     let js_url = absolute(PUBLISH_PAGE, &js_rel);
     let js = get_text(&js_url).await?;
