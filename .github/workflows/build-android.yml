@@ -1,0 +1,68 @@
+name: Build Android APK
+
+# 手动跑或 push main 自动出 APK；产物在 Actions 页下载（也可后续转 Release）。
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+
+jobs:
+  android:
+    name: Android (aarch64 / arm64-v8a)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 设置 pnpm
+        run: npm i -g pnpm@9
+
+      - name: 设置 Rust（含 Android target）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 设置 Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+          add-to-path: true
+
+      - name: 接受 Android SDK 许可
+        run: yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端
+        run: pnpm build
+
+      - name: 初始化 Android 工程
+        run: npx tauri android init
+
+      - name: 构建 APK（aarch64，debug 签名可直接装）
+        run: npx tauri android build --target aarch64 --debug
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-aarch64
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
